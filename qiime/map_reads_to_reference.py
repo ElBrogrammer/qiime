@@ -13,7 +13,7 @@ __status__ = "Development"
 
 from os.path import join, splitext, exists
 from cogent.parse.blast import MinimalBlatParser9
-from cogent.app.blat import (
+from qiime.pycogent_backports.blat import (
   assign_dna_reads_to_protein_database as blat_assign_dna_reads_to_protein_database,
   assign_dna_reads_to_dna_database as blat_assign_dna_reads_to_dna_database)
 from cogent.app.usearch import (clusters_from_blast_uc_file,
@@ -191,7 +191,7 @@ class BlatDatabaseMapper(DatabaseMapper):
                  database_fasta_fp=database_fasta_fp,
                  output_fp=raw_output_fp,
                  temp_dir=temp_dir,
-                 params=params)
+                 params=params, max_num_stop_codons=1)
 
 class BlatNtDatabaseMapper(BlatDatabaseMapper):
     
