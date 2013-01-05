@@ -4,8 +4,7 @@ from cogent import DNA
 from cogent.util.unit_test import TestCase, main
 from cogent.app.util import get_tmp_filename
 from qiime.pycogent_backports.blat import (Blat, assign_reads_to_database,
-        assign_dna_reads_to_dna_database, assign_dna_reads_to_protein_database,
-        _count_six_frame_stop_codons)
+        assign_dna_reads_to_dna_database, assign_dna_reads_to_protein_database)
 from os.path import join, exists
 from os import remove
 from re import search
@@ -111,23 +110,6 @@ class BlatTests(TestCase):
         obs = [l for l in obs_lines if not l.startswith('#')]
 
         self.assertEqual(obs, [])
-
-    def test_count_six_frame_stop_codons(self):
-        """Test correctly counts number of stop codons based on six frames."""
-        # None.
-        seq = DNA.makeSequence('AAA')
-        obs = _count_six_frame_stop_codons(seq)
-        self.assertEqual(obs, 0)
-
-        # One.
-        seq = DNA.makeSequence('TAA')
-        obs = _count_six_frame_stop_codons(seq)
-        self.assertEqual(obs, 1)
-
-        # Multiple (including in reverse complement).
-        seq = DNA.makeSequence('ATGCTAACATAAA')
-        obs = _count_six_frame_stop_codons(seq)
-        self.assertEqual(obs, 3)
 
     def test_get_base_command(self):
         """Tests that _get_base_command generates the proper command given

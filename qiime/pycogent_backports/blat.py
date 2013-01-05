@@ -381,36 +381,41 @@ def assign_dna_reads_to_protein_database(query_fasta_fp, database_fasta_fp,
     tmp = get_tmp_filename(tmp_dir=temp_dir, result_constructor=str)
     tmp_out = open(tmp, 'w')
 
+    num_pass = 0
     for label, sequence in MinimalFastaParser(open(query_fasta_fp)):
         seq_id = label.split()[0]
-
         s = DNA.makeSequence(sequence)
-        if max_num_stop_codons is None or \
-           _count_six_frame_stop_codons(s) <= max_num_stop_codons:
-            translations = standard_code.sixframes(s)
-            frames = [1,2,3,-1,-2,-3]
-            translations = dict(zip(frames, translations))
 
-            for frame, translation in sorted(translations.iteritems()):
-                entry = '>{seq_id}_frame_{frame}\n{trans}\n'
-                entry = entry.format(seq_id=seq_id, frame=frame,
-                                     trans=translation)
-                tmp_out.write(entry)
+        translations = {}
+
+        for start in [0, 1, 2]:
+            num_stop_codons = \
+                    len(standard_code.getStopIndices(s, start=start))
+            if max_num_stop_codons is None or num_stop_codons <= max_num_stop_codons:
+                translations[start + 1] = \
+                        standard_code.translate(s, start=start)
+
+        s_rc = s.rc()
+        for start, frame in zip([0, 1, 2], [-1, -2, -3]):
+            num_stop_codons = \
+                    len(standard_code.getStopIndices(s_rc, start=start))
+            if max_num_stop_codons is None or num_stop_codons <= max_num_stop_codons:
+                translations[frame] = \
+                        standard_code.translate(s_rc, start=start)
+
+        for frame, translation in sorted(translations.iteritems()):
+            entry = '>{seq_id}_frame_{frame}\n{trans}\n'
+            entry = entry.format(seq_id=seq_id, frame=frame,
+                                 trans=translation)
+            num_pass += 1
+            tmp_out.write(entry)
 
     tmp_out.close()
+
+    print "# pass: %d" % num_pass
+
     result = assign_reads_to_database(tmp, database_fasta_fp, output_fp, \
                                       params = my_params)
     remove(tmp)
 
     return result
-
-def _count_six_frame_stop_codons(dna):
-    """Takes DNASequence instance as input."""
-    num_stop_codons = 0
-
-    for seq in dna, dna.rc():
-        for frame in [0, 1, 2]:
-            num_stop_codons += \
-                    len(standard_code.getStopIndices(seq, start=frame))
-
-    return num_stop_codons

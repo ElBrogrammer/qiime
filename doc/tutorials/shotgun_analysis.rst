@@ -6,7 +6,7 @@ Analysis of shotgun sequencing data
 
 .. warning:: WARNING: Analysis of Shotgun sequencing (i.e., non-amplicon) data in QIIME is experimental. Use at your own risk!
 
-.. warning:: WARNING: This tutorial is based on Guerrero Negro microbial mat metagenome data. This data was generated on Sanger, and contains approximately 120k sequences. The mapping step in this tutorial requires 50 processor hours to run, so in general it's probably not easily reproducible. We're in the process of figuring out how to make these analyses more scalable, but in the meantime this data is here for other to experiment with. Selecting subsets of this data that run faster gives less meaningful results, so consider this tutorial a work in progress.
+.. warning:: WARNING: This tutorial is based on Guerrero Negro microbial mat metagenome data. This data was generated on Sanger, and contains approximately 120k sequences. The mapping step in this tutorial requires 50 processor hours to run, so in general it's probably not easily reproducible. We're in the process of figuring out how to make these analyses more scalable, but in the meantime this data is here for others to experiment with. Selecting subsets of this data that run faster gives less meaningful results, so consider this tutorial a work in progress.
 
 QIIME can perform translated search to assign nucleic acid sequence reads to a reference database containing protein sequences. We presently support assignment using ``usearch`` and ``blat``, and are actively working on additional methods. Our preferred method is currently ``blat`` as it supports comparison against large reference collections free of charge. While 32-bit ``usearch`` is free for academic and non-profit use, protein reference databases frequently require 64-bit ``usearch``, which is not free (even for non-profit or academic users, as of this writing). The following steps illustrate how to do read assignment with ``blat``, but ``usearch`` can be used in any of these steps by substituting ``-m blat`` for ``-m usearch``.
 
@@ -36,7 +36,7 @@ Defining environment variables for use in this tutorial
 
 Begin by defining some environment variables to easily refer to the reference sequences and associated metadata. In the QIIME Virtual Machines, this would look like this::
 
-	export reference_seqs=/home/ubuntu/qiime_software/img-qiime-***/gene_aa_seqs.faa
+	export reference_seqs=/home/ubuntu/qiime_software/img-qiime-***/aa_seqs.faa
 	export reference_md=/home/ubuntu/qiime_software/img-qiime-***/gene_ko_pathway.txt
 
 where ``img-qiime-***`` will be specific to the version of the reference dataset you downloaded from the `QIIME resources page <http://qiime.org/home_static/dataFiles.html>`_.
