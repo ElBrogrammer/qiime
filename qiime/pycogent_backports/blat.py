@@ -386,6 +386,19 @@ def assign_dna_reads_to_protein_database(query_fasta_fp, database_fasta_fp,
         seq_id = label.split()[0]
         s = DNA.makeSequence(sequence)
 
+#        translations = standard_code.sixframes(s)
+#        frames = [1,2,3,-1,-2,-3]
+#        translations = dict(zip(frames, translations))
+#
+#        for frame, translation in sorted(translations.iteritems()):
+#            if max_num_stop_codons is None or \
+#               translation.count('*') <= max_num_stop_codons:
+#                entry = '>{seq_id}_frame_{frame}\n{trans}\n'
+#                entry = entry.format(seq_id=seq_id, frame=frame,
+#                                     trans=translation)
+#                num_pass += 1
+#                tmp_out.write(entry)
+
         translations = {}
 
         for start in [0, 1, 2]:
