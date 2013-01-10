@@ -425,7 +425,7 @@ def assign_dna_reads_to_protein_database(query_fasta_fp, database_fasta_fp,
 
     tmp_out.close()
 
-    print "# pass: %d" % num_pass
+    #print "# pass: %d" % num_pass
 
     result = assign_reads_to_database(tmp, database_fasta_fp, output_fp, \
                                       params = my_params)
