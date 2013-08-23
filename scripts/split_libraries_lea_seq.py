@@ -13,8 +13,8 @@ from collections import defaultdict
 from itertools import izip
 from qcli import parse_command_line_parameters, make_option
 from qiime.golay import decode_golay_12, get_invalid_golay_barcodes
-from qiime.parse import MinimalFastqParser
-from qiime.split_libraries import check_map
+from qiime.parse import MinimalFastqParser, parse_mapping_file_to_dict
+from qiime.split_libraries import check_map, expand_degeneracies
 from qiime.split_libraries_fastq import correct_barcode, FastqParseError
 from qiime.util import create_dir
 
@@ -46,6 +46,9 @@ script_info['optional_options'] = [
                 default=1.5)
 ]
 script_info['version'] = __version__
+
+BARCODE_COLUMN = 'BarcodeSequence'
+REVERSE_PRIMER_COLUMN = 'ReversePrimer'
 
 def main():
     option_parser, opts, args = parse_command_line_parameters(**script_info)
@@ -90,7 +93,22 @@ def main():
         # Ensures that sample IDs and barcodes are unique, that barcodes are
         # all the same length, and that primers are present. Ensures barcodes
         # and primers only contain valid characters.
-        _, _, bc_to_sid, _, _, bc_to_primers, _ = check_map(map_f, False)
+        _, _, bc_to_sid, _, _, bc_to_fwd_primers, _ = check_map(map_f, False)
+        map_f.seek(0)
+
+        # TODO: add reverse primer validation similar to what check_map does
+        # (probably just modify check_map to account for reverse primer).
+        metadata_map = parse_mapping_file_to_dict(map_f)[0]
+        bc_to_rev_primers = {}
+        for sid, md in metadata_map.items():
+            if REVERSE_PRIMER_COLUMN in md:
+                bc_to_rev_primers[md[BARCODE_COLUMN]] = expand_degeneracies(
+                        md[REVERSE_PRIMER_COLUMN].upper().split(','))
+            else:
+                option_parser.error("The %s column does not exist in the "
+                                    "mapping file. %s is required." %
+                                    (REVERSE_PRIMER_COLUMN,
+                                     REVERSE_PRIMER_COLUMN))
 
     # Make sure our barcodes (which are guaranteed to be the same length at
     # this point) are the correct length that the user specified.
@@ -123,7 +141,6 @@ def main():
     barcode_errors_exceed_max_count = 0
     barcode_not_in_map_count = 0
     primer_mismatch_count = 0
-    misplaced_primer_count = 0
 
     # sample ID -> random barcode -> (fwd seq, rev seq) -> count
     random_bc_lookup = defaultdict(lambda:
@@ -170,7 +187,9 @@ def main():
         # qiime.split_libraries_fastq.quality_filter_sequence
 
         # Find the random barcode and primer. TODO: allow primer mismatches?
-        possible_primers = bc_to_primers[corrected_barcode]
+        # TODO: this may be dangerous as multiple primers may match, and we're
+        # grabbing these in random order.
+        possible_primers = bc_to_fwd_primers[corrected_barcode].keys()
 
         primer_idx = None
         primer = None
@@ -178,22 +197,59 @@ def main():
             if possible_primer in fwd_seq:
                 primer_idx = fwd_seq.index(possible_primer)
                 primer = possible_primer
-                break
+
+                # TODO: allow user to parameterize the min and max random
+                # barcode lengths.
+                if primer_idx < 16 or primer_idx > 18:
+                    primer_idx = None
+                    primer = None
+                    continue
+                else:
+                    break
 
         if primer_idx is None:
             primer_mismatch_count += 1
-            continue
-
-        # TODO: allow user to parameterize the min and max random barcode
-        # lengths.
-        if primer_idx < 16 or primer_idx > 18:
-            misplaced_primer_count += 1
             continue
 
         random_bc = fwd_seq[:primer_idx]
 
         # TODO: what to do with random barcodes that have ambiguous bases?
         fwd_seq = fwd_seq.replace(random_bc + primer, '', 1)
+
+        # TODO: how to handle phasing? Should the user be responsible for
+        # providing a standard sequence length that we truncate to here?
+
+        # Clean up reverse read. TODO: put this code into a function...
+
+        # Find the primer. TODO: allow primer mismatches?
+        # TODO: this may be dangerous as multiple primers may match, and we're
+        # grabbing these in random order.
+        possible_primers = bc_to_rev_primers[corrected_barcode]
+
+        primer_idx = None
+        primer = None
+        for possible_primer in possible_primers:
+            if possible_primer in rev_seq:
+                primer_idx = rev_seq.index(possible_primer)
+                primer = possible_primer
+
+                # TODO: allow user to parameterize the phasing length.
+                if primer_idx > 3:
+                    primer_idx = None
+                    primer = None
+                    continue
+                else:
+                    break
+
+        if primer_idx is None:
+            # TODO: count fwd and rev mismatches differently?
+            primer_mismatch_count += 1
+            continue
+
+        phase_seq = rev_seq[:primer_idx]
+
+        # TODO: what to do with phases that have ambiguous bases?
+        rev_seq = rev_seq.replace(phase_seq + primer, '', 1)
 
         random_bc_lookup[sample_id][random_bc][(fwd_seq, rev_seq)] += 1
 
@@ -203,7 +259,6 @@ def main():
     print barcode_errors_exceed_max_count
     print barcode_not_in_map_count
     print primer_mismatch_count
-    print misplaced_primer_count
     print
     print random_bc_lookup
 
