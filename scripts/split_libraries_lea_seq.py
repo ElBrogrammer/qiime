@@ -12,6 +12,7 @@ __email__ = "jai.rideout@gmail.com"
 from qcli import parse_command_line_parameters, make_option
 from qiime.golay import decode_golay_12
 from qiime.split_libraries import check_map
+from qiime.util import create_dir
 
 script_info = {}
 script_info['brief_description'] = ""
@@ -61,8 +62,21 @@ def main():
         option_parser.error("Invalid barcode length: %d. Must be greater "
                             "than zero." % barcode_len)
 
-    #with open(opts.mapping_fp, 'U') as map_f:
-    #    _, _, barcode_to_sample_id, _, _, _, _ = check_map(map_f, False)
+    create_dir(opts.output_dir)
+
+    with open(opts.mapping_fp, 'U') as map_f:
+        # Ensures that sample IDs and barcodes are unique, that barcodes are
+        # all the same length, and that primers are present. Ensures barcodes
+        # and primers only contain valid characters.
+        _, _, bc_to_sid, _, _, bc_to_primers, _ = check_map(map_f, False)
+
+    # Make sure our barcodes (which are guaranteed to be the same length at
+    # this point) are the correct length that the user specified.
+    barcode_len_in_map = len(bc_to_sid.keys()[0])
+    if barcode_len_in_map != barcode_len:
+        option_parser.error("Barcodes in mapping file are of length %d, but "
+                            "expected barcodes of length %d." %
+                            (barcode_len_in_map, barcode_len))
 
 
 if __name__ == "__main__":
