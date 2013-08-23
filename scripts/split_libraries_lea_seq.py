@@ -186,72 +186,39 @@ def main():
         # TODO: other quality filtering using
         # qiime.split_libraries_fastq.quality_filter_sequence
 
-        # Find the random barcode and primer. TODO: allow primer mismatches?
-        # TODO: this may be dangerous as multiple primers may match, and we're
-        # grabbing these in random order.
+        # Extract the random barcode and primer from the forward read.
         possible_primers = bc_to_fwd_primers[corrected_barcode].keys()
 
-        primer_idx = None
-        primer = None
-        for possible_primer in possible_primers:
-            if possible_primer in fwd_seq:
-                primer_idx = fwd_seq.index(possible_primer)
-                primer = possible_primer
-
-                # TODO: allow user to parameterize the min and max random
-                # barcode lengths.
-                if primer_idx < 16 or primer_idx > 18:
-                    primer_idx = None
-                    primer = None
-                    continue
-                else:
-                    break
-
-        if primer_idx is None:
+        # TODO: allow user to parameterize the min and max random barcode
+        # lengths.
+        try:
+            random_bc, _, clean_fwd_seq = extract_primer(fwd_seq,
+                                                         possible_primers,
+                                                         min_idx=16,
+                                                         max_idx=18)
+        except PrimerMismatchError:
             primer_mismatch_count += 1
             continue
-
-        random_bc = fwd_seq[:primer_idx]
-
-        # TODO: what to do with random barcodes that have ambiguous bases?
-        fwd_seq = fwd_seq.replace(random_bc + primer, '', 1)
 
         # TODO: how to handle phasing? Should the user be responsible for
         # providing a standard sequence length that we truncate to here?
 
-        # Clean up reverse read. TODO: put this code into a function...
-
-        # Find the primer. TODO: allow primer mismatches?
-        # TODO: this may be dangerous as multiple primers may match, and we're
-        # grabbing these in random order.
+        # Clean up reverse read by extracting the phased portion and the
+        # reverse primer.
         possible_primers = bc_to_rev_primers[corrected_barcode]
 
-        primer_idx = None
-        primer = None
-        for possible_primer in possible_primers:
-            if possible_primer in rev_seq:
-                primer_idx = rev_seq.index(possible_primer)
-                primer = possible_primer
-
-                # TODO: allow user to parameterize the phasing length.
-                if primer_idx > 3:
-                    primer_idx = None
-                    primer = None
-                    continue
-                else:
-                    break
-
-        if primer_idx is None:
+        # TODO: allow user to parameterize the phasing length.
+        try:
+            phase_seq, _, clean_rev_seq = extract_primer(rev_seq,
+                                                         possible_primers,
+                                                         max_idx=3)
+        except PrimerMismatchError:
             # TODO: count fwd and rev mismatches differently?
             primer_mismatch_count += 1
             continue
 
-        phase_seq = rev_seq[:primer_idx]
-
-        # TODO: what to do with phases that have ambiguous bases?
-        rev_seq = rev_seq.replace(phase_seq + primer, '', 1)
-
-        random_bc_lookup[sample_id][random_bc][(fwd_seq, rev_seq)] += 1
+        random_bc_lookup[sample_id][random_bc][(clean_fwd_seq,
+                                                clean_rev_seq)] += 1
 
     fwd_read_f.close()
     rev_read_f.close()
@@ -262,9 +229,44 @@ def main():
     print
     print random_bc_lookup
 
-
 class PairedEndParseError(FastqParseError):
     pass
+
+class PrimerMismatchError(Exception):
+    pass
+
+def extract_primer(seq, possible_primers, min_idx=None, max_idx=None):
+    """
+
+    ``min_idx`` and ``max_idx`` are inclusive.
+
+    TODO: allow primer mismatches?
+    TODO: this may be dangerous as multiple primers may match, and we're
+        passed these in random order.
+    """
+    primer_idx = None
+    primer = None
+    for possible_primer in possible_primers:
+        if possible_primer in seq:
+            primer_idx = seq.index(possible_primer)
+            primer = possible_primer
+
+            if (min_idx is not None and primer_idx < min_idx) or \
+               (max_idx is not None and primer_idx > max_idx):
+                primer_idx = None
+                primer = None
+                continue
+            else:
+                break
+
+    if primer_idx is None:
+        # TODO: fill in error message
+        raise PrimerMismatchError
+
+    before_primer = seq[:primer_idx]
+
+    # TODO: what to do with random barcodes/phases that have ambiguous bases?
+    return before_primer, primer, seq.replace(before_primer + primer, '', 1)
 
 
 if __name__ == "__main__":
