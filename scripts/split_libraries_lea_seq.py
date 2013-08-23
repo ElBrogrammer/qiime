@@ -9,6 +9,7 @@ __version__ = "1.7.0-dev"
 __maintainer__ = "Jai Ram Rideout"
 __email__ = "jai.rideout@gmail.com"
 
+from collections import defaultdict
 from itertools import izip
 from qcli import parse_command_line_parameters, make_option
 from qiime.golay import decode_golay_12, get_invalid_golay_barcodes
@@ -42,18 +43,7 @@ script_info['optional_options'] = [
     make_option('--max_barcode_errors', type='float',
                 help='the maximum allowable number of errors in the barcode '
                      'if passing --barcode_type golay_12 [default: %default]',
-                default=1.5),
-    make_option('--retain_unassigned_reads', action='store_true',
-                help='retain sequences which don\'t map to a barcode in the '
-                     'mapping file (sample ID will be the value of '
-                     '--unassigned_reads_sample_id) [default: %default]',
-                default=False),
-    make_option('--unassigned_reads_sample_id', type='string',
-                help='the sample ID to use for unassigned reads if '
-                     '--retain_unassigned_reads is provided. This sample ID '
-                     'cannot already exist in the input mapping file '
-                     '[default: %default]',
-                default='Unassigned')
+                default=1.5)
 ]
 script_info['version'] = __version__
 
@@ -62,8 +52,6 @@ def main():
 
     barcode_type = opts.barcode_type
     max_barcode_errors = opts.max_barcode_errors
-    retain_unassigned_reads = opts.retain_unassigned_reads
-    unassigned_reads_sample_id = opts.unassigned_reads_sample_id
 
     if barcode_type == 'golay_12':
         barcode_correction_fn = decode_golay_12
@@ -126,24 +114,21 @@ def main():
                                 "barcodes.\n\nInvalid barcodes: %s" %
                                 ' '.join(invalid_golay_barcodes))
 
-    # Verify that the unassigned sample ID isn't a sample ID in the mapping
-    # file.
-    if retain_unassigned_reads and \
-            unassigned_reads_sample_id in bc_to_sid.values():
-        option_parser.error("The sample ID '%s' that was specified via "
-                            "--unassigned_reads_sample_id already exists as a "
-                            "valid sample ID in the mapping file. Please "
-                            "specify a different name for the unassigned "
-                            "reads sample ID." % unassigned_reads_sample_id)
-
     header_idx = 0
     seq_idx = 1
     qual_idx = 2
     fwd_read_f = open(seq_fps[0], 'U')
     rev_read_f = open(seq_fps[1], 'U')
 
-    count_barcode_errors_exceed_max = 0
-    count_barcode_not_in_map = 0
+    barcode_errors_exceed_max_count = 0
+    barcode_not_in_map_count = 0
+    primer_mismatch_count = 0
+    misplaced_primer_count = 0
+
+    # sample ID -> random barcode -> (fwd seq, rev seq) -> count
+    random_bc_lookup = defaultdict(lambda:
+                                   defaultdict(lambda:
+                                               defaultdict(int)))
 
     for fwd_read, rev_read in izip(
             MinimalFastqParser(fwd_read_f, strict=False),
@@ -158,9 +143,13 @@ def main():
         else:
             header = fwd_read[header_idx]
 
+        fwd_seq = fwd_read[seq_idx]
+        rev_seq = rev_read[seq_idx]
+
         # Grab the barcode sequence. It is always at the very end of the
-        # forward read.
-        barcode = fwd_read[seq_idx][-barcode_len:]
+        # forward read. Strip the barcode from the sequence.
+        barcode = fwd_seq[-barcode_len:]
+        fwd_seq = fwd_seq[:-barcode_len]
 
         # Correct the barcode (if applicable) and map to sample ID.
         num_barcode_errors, corrected_barcode, _, sample_id = correct_barcode(
@@ -168,26 +157,55 @@ def main():
 
         # Skip barcodes with too many errors.
         if num_barcode_errors > max_barcode_errors:
-          count_barcode_errors_exceed_max += 1
+          barcode_errors_exceed_max_count += 1
           continue
 
-        # Skip unassignable reads unless otherwise requested.
+        # Skip unassignable reads. TODO: do we want to keep unassignable reads?
+        # If so, how to choose the primer to remove?
         if sample_id is None:
-          if not retain_unassigned_reads:
-              count_barcode_not_in_map += 1
-              continue
-          else:
-              sample_id = unassigned_reads_sample_id
+          barcode_not_in_map_count += 1
+          continue
 
         # TODO: other quality filtering using
         # qiime.split_libraries_fastq.quality_filter_sequence
-        
+
+        # Find the random barcode and primer. TODO: allow primer mismatches?
+        possible_primers = bc_to_primers[corrected_barcode]
+
+        primer_idx = None
+        primer = None
+        for possible_primer in possible_primers:
+            if possible_primer in fwd_seq:
+                primer_idx = fwd_seq.index(possible_primer)
+                primer = possible_primer
+                break
+
+        if primer_idx is None:
+            primer_mismatch_count += 1
+            continue
+
+        # TODO: allow user to parameterize the min and max random barcode
+        # lengths.
+        if primer_idx < 16 or primer_idx > 18:
+            misplaced_primer_count += 1
+            continue
+
+        random_bc = fwd_seq[:primer_idx]
+
+        # TODO: what to do with random barcodes that have ambiguous bases?
+        fwd_seq = fwd_seq.replace(random_bc + primer, '', 1)
+
+        random_bc_lookup[sample_id][random_bc][(fwd_seq, rev_seq)] += 1
 
     fwd_read_f.close()
     rev_read_f.close()
 
-    print count_barcode_errors_exceed_max
-    print count_barcode_not_in_map
+    print barcode_errors_exceed_max_count
+    print barcode_not_in_map_count
+    print primer_mismatch_count
+    print misplaced_primer_count
+    print
+    print random_bc_lookup
 
 
 class PairedEndParseError(FastqParseError):
