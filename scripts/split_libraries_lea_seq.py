@@ -43,6 +43,17 @@ script_info['optional_options'] = [
                 help='the maximum allowable number of errors in the barcode '
                      'if passing --barcode_type golay_12 [default: %default]',
                 default=1.5),
+    make_option('--retain_unassigned_reads', action='store_true',
+                help='retain sequences which don\'t map to a barcode in the '
+                     'mapping file (sample ID will be the value of '
+                     '--unassigned_reads_sample_id) [default: %default]',
+                default=False),
+    make_option('--unassigned_reads_sample_id', type='string',
+                help='the sample ID to use for unassigned reads if '
+                     '--retain_unassigned_reads is provided. This sample ID '
+                     'cannot already exist in the input mapping file '
+                     '[default: %default]',
+                default='Unassigned')
 ]
 script_info['version'] = __version__
 
@@ -51,11 +62,8 @@ def main():
 
     barcode_type = opts.barcode_type
     max_barcode_errors = opts.max_barcode_errors
-
-    if max_barcode_errors < 0:
-        option_parser.error("--max_barcode_errors must be greater than or "
-                            "equal to zero. You provided %.4f." %
-                            max_barcode_errors)
+    retain_unassigned_reads = opts.retain_unassigned_reads
+    unassigned_reads_sample_id = opts.unassigned_reads_sample_id
 
     if barcode_type == 'golay_12':
         barcode_correction_fn = decode_golay_12
@@ -70,6 +78,11 @@ def main():
                                 "must be either golay_12 or a positive "
                                 "integer indicating the barcode length." %
                                 barcode_type)
+
+    if max_barcode_errors < 0:
+        option_parser.error("--max_barcode_errors must be greater than or "
+                            "equal to zero. You provided %.4f." %
+                            max_barcode_errors)
 
     if barcode_len < 1:
         option_parser.error("Invalid barcode length: %d. Must be greater "
@@ -113,6 +126,16 @@ def main():
                                 "barcodes.\n\nInvalid barcodes: %s" %
                                 ' '.join(invalid_golay_barcodes))
 
+    # Verify that the unassigned sample ID isn't a sample ID in the mapping
+    # file.
+    if retain_unassigned_reads and \
+            unassigned_reads_sample_id in bc_to_sid.values():
+        option_parser.error("The sample ID '%s' that was specified via "
+                            "--unassigned_reads_sample_id already exists as a "
+                            "valid sample ID in the mapping file. Please "
+                            "specify a different name for the unassigned "
+                            "reads sample ID." % unassigned_reads_sample_id)
+
     header_idx = 0
     seq_idx = 1
     qual_idx = 2
@@ -120,6 +143,7 @@ def main():
     rev_read_f = open(seq_fps[1], 'U')
 
     count_barcode_errors_exceed_max = 0
+    count_barcode_not_in_map = 0
 
     for fwd_read, rev_read in izip(
             MinimalFastqParser(fwd_read_f, strict=False),
@@ -147,10 +171,23 @@ def main():
           count_barcode_errors_exceed_max += 1
           continue
 
+        # Skip unassignable reads unless otherwise requested.
+        if sample_id is None:
+          if not retain_unassigned_reads:
+              count_barcode_not_in_map += 1
+              continue
+          else:
+              sample_id = unassigned_reads_sample_id
+
+        # TODO: other quality filtering using
+        # qiime.split_libraries_fastq.quality_filter_sequence
+        
+
     fwd_read_f.close()
     rev_read_f.close()
 
     print count_barcode_errors_exceed_max
+    print count_barcode_not_in_map
 
 
 class PairedEndParseError(FastqParseError):
