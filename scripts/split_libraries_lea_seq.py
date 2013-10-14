@@ -266,6 +266,8 @@ def extract_primer(seq, possible_primers, min_idx=None, max_idx=None):
     before_primer = seq[:primer_idx]
 
     # TODO: what to do with random barcodes/phases that have ambiguous bases?
+    # TODO: seq.replace may be dangerous here- should verify it won't remove
+    # the cruft from somewhere unintended.
     return before_primer, primer, seq.replace(before_primer + primer, '', 1)
 
 
