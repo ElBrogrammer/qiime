@@ -4,20 +4,23 @@ from __future__ import division
 
 __author__ = "Greg Caporaso"
 __copyright__ = "Copyright 2011, The QIIME Project"
-__credits__ = ["Greg Caporaso, Justin Kuczynski, Kyle Patnode"]
+__credits__ = ["Greg Caporaso", "Justin Kuczynski", "Kyle Patnode",
+               "Jai Ram Rideout"]
 __license__ = "GPL"
 __version__ = "1.7.0-dev"
 __maintainer__ = "Greg Caporaso"
 __email__ = "gregcaporaso@gmail.com"
 __status__ = "Development"
 
+from os import makedirs
+from os.path import split, splitext, exists, join
 from random import shuffle
 from numpy import array, mean, append, zeros
 from cogent.cluster.procrustes import procrustes
 from cogent.util.dict2d import Dict2D
 from qiime.util import create_dir
-from qiime.parse import parse_coords
-from qiime.format import format_coords
+from qiime.parse import fields_to_dict, parse_coords
+from qiime.format import format_coords, format_p_value_for_num_iters
 
 def shuffle_full_matrix(m):
     """  """
@@ -265,3 +268,97 @@ def procrustes_monte_carlo(coords_f1,\
         trial_summary_f.close()
     
     return actual_m_squared, trial_m_squareds, count_better, count_better/trials
+
+def transform_coordinate_matrices(output_dir, input_fps, sid_map_fps=None,
+                                  num_dims=3, random_trials=None,
+                                  store_trial_details=False):
+    if num_dims < 0:
+        raise ValueError("Invalid number of dimensions %d. Must be greater "
+                         "than or equal to zero." % num_dims)
+
+    if random_trials is not None and random_trials < 10:
+        raise ValueError("Invalid number of trials %d. Must perform 10 or "
+                         "more trials for Monte Carlo analysis." %
+                         random_trials)
+
+    if num_dims == 0:
+        max_dims_str = 'alldim'
+    else:
+        max_dims_str = str(num_dims)
+
+    if sid_map_fps and (len(sid_map_fps) + 1) != len(input_fps):
+       raise ValueError("If providing sample id maps, there must be exactly "
+                        "one fewer sample id maps than input coordinate "
+                        "matrices.")
+
+    if not exists(output_dir):
+        makedirs(output_dir)
+
+    reference_input_fp = input_fps[0]
+    reference_input_fp_dir, input_fn1 = split(reference_input_fp)
+    reference_input_fp_basename, reference_input_fp_ext = splitext(input_fn1)
+    output_summary_fp = join(output_dir, 'procrustes_results.txt')
+
+    for i, query_input_fp in enumerate(input_fps[1:]):
+        query_input_fp_dir, query_input_fn = split(query_input_fp)
+        query_input_fp_basename, query_input_fp_ext = splitext(query_input_fn)
+        output_matrix1_fp = join(output_dir,
+                '%s_transformed_reference.txt' % reference_input_fp_basename)
+        output_matrix2_fp = join(output_dir,
+                '%s_transformed_q%d.txt' % (query_input_fp_basename, i + 1))
+
+        if sid_map_fps:
+            sample_id_map = _build_sample_id_map(open(sid_map_fps[i], 'U'))
+        else:
+            sample_id_map = None
+
+        trans_coords1, trans_coords2, m2, _ = get_procrustes_results(
+                open(reference_input_fp, 'U'), open(query_input_fp, 'U'),
+                sample_id_map=sample_id_map, randomize=False,
+                max_dimensions=num_dims)
+
+        with open(output_matrix1_fp, 'w') as output_matrix1_f:
+            output_matrix1_f.write(trans_coords1)
+        with open(output_matrix2_fp, 'w') as output_matrix2_f:
+            output_matrix2_f.write(trans_coords2)
+
+        if random_trials:
+            if store_trial_details:
+                trial_output_dir = join(output_dir, 'trial_details_%d' % i + 2)
+            else:
+                trial_output_dir = None
+
+            coords_f1 = list(open(reference_input_fp, 'U'))
+            coords_f2 = list(open(query_input_fp, 'U'))
+            actual_m2, _, count_better, p_val = procrustes_monte_carlo(
+                    coords_f1, coords_f2, trials=random_trials,
+                    max_dimensions=num_dims, sample_id_map=sample_id_map,
+                    trial_output_dir=trial_output_dir)
+
+            # truncate the p-value to the correct number of significant digits
+            p_val_str = format_p_value_for_num_iters(p_val, random_trials)
+            summary_file_lines.append('%s\t%s\t%s\t%s\t%d\t%1.3f' %
+                    (reference_input_fp, query_input_fp, max_dims_str,
+                     p_val_str, count_better, actual_m2))
+        else:
+            summary_file_lines.append('%s\t%s\t%s\tNA\tNA\t%1.3f' %
+                    (reference_input_fp, query_input_fp, max_dims_str, m2))
+
+    # Write output summary
+    with open(output_summary_fp, 'w') as f:
+        f.write('\n'.join(summary_file_lines))
+        f.write('\n')
+
+def _build_sample_id_map(sample_id_map_f):
+    sample_id_map = {}
+
+    for k, v in fields_to_dict(sample_id_map_f).items():
+        sample_id_map[k] = v[0]
+
+    return sample_id_map
+
+def _format_summary_lines(rows, delimiter='\t'):
+    header = [('#FP1', 'FP2', 'Num included dimensions', 'Monte Carlo p-value',
+               'Count better','M^2'),
+              ('#Warning: p-values in this file are NOT currently adjusted '
+               'for multiple comparisons.')]
