@@ -285,15 +285,19 @@ def transform_coordinate_matrices(output_dir, input_fps, sid_map_fps=None,
                          "more trials for Monte Carlo analysis." %
                          random_trials)
 
+    if len(input_fps) < 2:
+        raise ValueError("Must provide at least two coordinate matrices as "
+                         "input.")
+
+    if sid_map_fps and (len(sid_map_fps) + 1) != len(input_fps):
+        raise ValueError("If providing sample id maps, there must be exactly "
+                         "one fewer sample id maps than input coordinate "
+                         "matrices.")
+
     if num_dims is None:
         max_dims_str = 'alldim'
     else:
         max_dims_str = str(num_dims)
-
-    if sid_map_fps and (len(sid_map_fps) + 1) != len(input_fps):
-       raise ValueError("If providing sample id maps, there must be exactly "
-                        "one fewer sample id maps than input coordinate "
-                        "matrices.")
 
     if not exists(output_dir):
         makedirs(output_dir)

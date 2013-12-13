@@ -22,7 +22,8 @@ from qiime.parse import parse_coords
 from qiime.transform_coordinate_matrices import (_build_sample_id_map,
         map_sample_ids, reorder_coords, filter_coords_matrix,
         pad_coords_matrix, pad_coords_matrices, get_procrustes_results,
-        procrustes_monte_carlo, _write_summary_lines)
+        procrustes_monte_carlo, transform_coordinate_matrices,
+        _write_summary_lines)
 from qiime.util import get_qiime_temp_dir
 
 class ProcrustesTests(TestCase):
@@ -233,6 +234,26 @@ class ProcrustesTests(TestCase):
         self.assertEqual(len(actual[1]),expected_len_trial_m2)
         self.assertEqual(actual[2], expected_count_better)
         self.assertEqual(actual[3], expected_p_value)
+
+    def test_transform_coordinate_matrices_invalid_input(self):
+        """Test that errors are raised appropriately upon invalid input."""
+        # invalid num_dims
+        with self.assertRaises(ValueError):
+            transform_coordinate_matrices('/foo', ['/bar.txt'], num_dims=0)
+
+        # invalid random_trials
+        with self.assertRaises(ValueError):
+            transform_coordinate_matrices('/foo', ['/bar.txt'],
+                                          random_trials=9)
+
+        # invalid number of coordinate matrices
+        with self.assertRaises(ValueError):
+            transform_coordinate_matrices('/foo', ['/bar.txt'])
+
+        # invalid number of sample ID maps
+        with self.assertRaises(ValueError):
+            transform_coordinate_matrices('/foo', ['/bar.txt', '/baz.txt'],
+                    sid_map_fps=['/sidmap1.txt', '/sidmap2.txt'])
 
     def test_build_sample_id_map(self):
         """Test parsing and building a sample ID map."""
