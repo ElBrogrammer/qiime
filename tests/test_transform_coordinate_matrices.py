@@ -4,26 +4,45 @@ from __future__ import division
 
 __author__ = "Greg Caporaso"
 __copyright__ = "Copyright 2011, The QIIME Project"
-__credits__ = ["Greg Caporaso"]
+__credits__ = ["Greg Caporaso", "Jai Ram Rideout"]
 __license__ = "GPL"
 __version__ = "1.7.0-dev"
 __maintainer__ = "Greg Caporaso"
 __email__ = "gregcaporaso@gmail.com"
 __status__ = "Development"
  
+from os.path import exists, join
+from shutil import rmtree
+from tempfile import mkdtemp, mkstemp
+
 from numpy import array
+from cogent.util.misc import remove_files
 from cogent.util.unit_test import TestCase, main
 from qiime.parse import parse_coords
-from qiime.transform_coordinate_matrices import map_sample_ids, reorder_coords,\
-    filter_coords_matrix, pad_coords_matrix, pad_coords_matrices,\
-    get_procrustes_results, procrustes_monte_carlo
-
+from qiime.transform_coordinate_matrices import (_build_sample_id_map,
+        map_sample_ids, reorder_coords, filter_coords_matrix,
+        pad_coords_matrix, pad_coords_matrices, get_procrustes_results,
+        procrustes_monte_carlo, _write_summary_lines)
+from qiime.util import get_qiime_temp_dir
 
 class ProcrustesTests(TestCase):
     """ Tests of the Procrustes wrapper code """
-    
+
     def setUp(self):
         """ """
+        self.files_to_remove = []
+        self.dirs_to_remove = []
+
+        qiime_tmp_dir = get_qiime_temp_dir()
+        prefix = 'qiime_test_transform_coordinate_matrices_'
+        suffix = '.txt'
+
+        self.tmp_dir = mkdtemp(dir=qiime_tmp_dir, prefix=prefix)
+        self.dirs_to_remove.append(self.tmp_dir)
+
+        self.summary_fp = join(self.tmp_dir, 'summary.txt')
+        self.files_to_remove.append(self.summary_fp)
+
         self.pcoa1_f = pcoa1_f.split('\n')
         self.sample_ids1, self.coords1, self.eigvals1, self.pct_var1 =\
           parse_coords(self.pcoa1_f)
@@ -38,7 +57,19 @@ class ProcrustesTests(TestCase):
           parse_coords(self.pcoa3_f)
           
         self.sample_id_map1 = sample_id_map1
-        
+        self.sample_id_map1_f = sample_id_map1_f.split('\n')
+
+        self.summary_lines1 = [('foo.txt', 'bar.txt', 'a', 'b', 1, 0.011),
+                               ('baz',)]
+
+    def tearDown(self):
+        """Remove temporary files/dirs created by tests."""
+        remove_files(self.files_to_remove, error_on_missing=False)
+
+        for d in self.dirs_to_remove:
+            if exists(d):
+                rmtree(d)
+
     def test_map_sample_ids(self):
         """Mapping and reordering of sample IDs functions as expected
         """
@@ -203,6 +234,30 @@ class ProcrustesTests(TestCase):
         self.assertEqual(actual[2], expected_count_better)
         self.assertEqual(actual[3], expected_p_value)
 
+    def test_build_sample_id_map(self):
+        """Test parsing and building a sample ID map."""
+        obs = _build_sample_id_map(self.sample_id_map1_f)
+        self.assertEqual(obs, self.sample_id_map1)
+
+    def test_write_summary_lines(self):
+        """Test writing delimited data to a file."""
+        _write_summary_lines(self.summary_fp, self.summary_lines1)
+
+        with open(self.summary_fp, 'U') as summary_f:
+            obs = summary_f.read()
+
+        self.assertEqual(obs, exp_summary1)
+
+    def test_write_summary_lines_specify_delimiter(self):
+        """Test writing data to a file using a specific delimiter."""
+        _write_summary_lines(self.summary_fp, self.summary_lines1,
+                             delimiter=',')
+
+        with open(self.summary_fp, 'U') as summary_f:
+            obs = summary_f.read()
+
+        self.assertEqual(obs, exp_summary1.replace('\t', ','))
+
 
 pcoa1_f = """pc vector number	1	2	3	4	5	6
 CP3A1	-322.585729836	938.204618621	-28.2137779927	490.569459399	-1046.48732174	-234.500487421
@@ -248,8 +303,24 @@ eigvals	1.03654365499	0.486727634877	0.436010533243	0.344489629748	0.32544383996
 % variation explained	17.9408597738	8.42445197874	7.54662266189	5.96254688461	5.63289569997	5.2248294546
 """
 
-sample_id_map1 = {'CC1A1':'s1','CC2A1':'s2','CP1A1':'s3','CP3A1':'s4',\
-'aaa':'s1','bbb':'s2','ccc':'s3','ddd':'s4'}
+sample_id_map1 = {'CC1A1':'s1','CC2A1':'s2','CP1A1':'s3','CP3A1':'s4',
+                  'aaa':'s1','bbb':'s2','ccc':'s3','ddd':'s4'}
+
+sample_id_map1_f = """CP3A1\ts4
+CC1A1\ts1
+CC2A1\ts2\tignore me
+CP1A1\ts3
+aaa\ts1
+bbb\ts2
+ccc\ts3
+ddd\ts4
+"""
+
+exp_summary1 = """# FP1	FP2	Num included dimensions	Monte Carlo p-value	Count better	M^2
+# Warning: p-values in this file are NOT currently adjusted for multiple comparisons.
+foo.txt	bar.txt	a	b	1	0.011
+baz
+"""
 
 if __name__ == "__main__":
     main()
