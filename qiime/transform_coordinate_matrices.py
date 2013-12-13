@@ -12,6 +12,7 @@ __maintainer__ = "Greg Caporaso"
 __email__ = "gregcaporaso@gmail.com"
 __status__ = "Development"
 
+import csv
 from os import makedirs
 from os.path import split, splitext, exists, join
 from random import shuffle
@@ -63,7 +64,7 @@ def map_sample_ids(sample_ids,sample_id_map):
     try:
         result = [sample_id_map[sample_id] for sample_id in sample_ids]
     except KeyError:
-        raise KeyError, "Unknown sample ID: %s" % sample_id
+        raise KeyError("Unknown sample ID: %s" % sample_id)
         
     return result
 
@@ -77,10 +78,10 @@ def reorder_coords(coords,sample_ids,order):
     
     """
     try:
-        result =  array([coords[sample_ids.index(sample_id)]\
-                    for sample_id in order])
+        result =  array([coords[sample_ids.index(sample_id)]
+                         for sample_id in order])
     except ValueError:
-        raise ValueError, 'Unknown sample ID: %s' % sample_id
+        raise ValueError('Unknown sample ID: %s' % sample_id)
     return result
 
 def filter_coords_matrix(coords,dimensions_to_keep):
@@ -88,15 +89,14 @@ def filter_coords_matrix(coords,dimensions_to_keep):
 
 def pad_coords_matrix(coords,dimensions_to_add):
     if dimensions_to_add < 0:
-        raise ValueError, 'Dimensions to add must be >= 0.'
+        raise ValueError('Dimensions to add must be >= 0.')
     elif dimensions_to_add == 0:
         return coords
     else:
         result = []
         # find a more efficent way to do this (don't have
         # internet right now)
-        return array([list(c) + [0.] * dimensions_to_add
-                      for c in coords])
+        return array([list(c) + [0.] * dimensions_to_add for c in coords])
 
 def pad_coords_matrices(coords1,coords2):
     # Determine how many dimensions are in each vector, and the difference
@@ -119,9 +119,9 @@ def get_mean_percent_variation(v1,v2):
 def get_mean_eigenvalues(v1,v2):
     return [mean([p1,p2]) for p1,p2 in zip(v1,v2)]
 
-def get_procrustes_results(coords_f1,coords_f2,sample_id_map=None,\
-    randomize=None,max_dimensions=None,\
-    get_eigenvalues=get_mean_eigenvalues,\
+def get_procrustes_results(coords_f1,coords_f2,sample_id_map=None,
+    randomize=None,max_dimensions=None,
+    get_eigenvalues=get_mean_eigenvalues,
     get_percent_variation_explained=get_mean_percent_variation):
     """ """
     # Parse the PCoA files
@@ -136,64 +136,61 @@ def get_procrustes_results(coords_f1,coords_f2,sample_id_map=None,\
     coords1 = reorder_coords(coords1,sample_ids1,order)
     coords2 = reorder_coords(coords2,sample_ids2,order)
     if len(order) == 0:
-        raise ValueError, 'No overlapping samples in the two files'
+        raise ValueError('No overlapping samples in the two files')
         
     # If this is a random trial, apply the shuffling function passed as 
     # randomize()
     if randomize:
         coords2 = randomize(coords2)
-        randomized_coords2 = format_coords(coord_header=order,\
-                                            coords=coords2,\
-                                            eigvals=eigvals2,\
-                                            pct_var=pct_var2)
+        randomized_coords2 = format_coords(coord_header=order, coords=coords2,
+                                           eigvals=eigvals2, pct_var=pct_var2)
     else:
         randomized_coords2 = None
         
         
     coords1, coords2 = pad_coords_matrices(coords1,coords2)
-    if max_dimensions:
-        coords1 = filter_coords_matrix(coords1,max_dimensions)
-        coords2 = filter_coords_matrix(coords2,max_dimensions)
-        pct_var1 = pct_var1[:max_dimensions]
-        pct_var2 = pct_var2[:max_dimensions]
-        eigvals1 = eigvals1[:max_dimensions]
-        eigvals2 = eigvals2[:max_dimensions]
-    else:
+    if max_dimensions is None:
         if len(pct_var1)>len(pct_var2):
             pct_var2 = append(pct_var2,zeros(len(pct_var1)-len(pct_var2)))
             eigvals2 = append(eigvals2,zeros(len(eigvals1)-len(eigvals2)))
         elif len(pct_var1)<len(pct_var2):
             pct_var1 = append(pct_var1,zeros(len(pct_var2)-len(pct_var1)))
             eigvals1 = append(eigvals1,zeros(len(eigvals2)-len(eigvals1)))
+    else:
+        coords1 = filter_coords_matrix(coords1,max_dimensions)
+        coords2 = filter_coords_matrix(coords2,max_dimensions)
+        pct_var1 = pct_var1[:max_dimensions]
+        pct_var2 = pct_var2[:max_dimensions]
+        eigvals1 = eigvals1[:max_dimensions]
+        eigvals2 = eigvals2[:max_dimensions]
 
     # Run the Procrustes analysis
     transformed_coords_m1, transformed_coords_m2, m_squared =\
      procrustes(coords1,coords2)
-    # print coords2
-    #print transformed_coords_m2
     
     eigvals = get_eigenvalues(eigvals1, eigvals2)
     pct_var = get_percent_variation_explained(pct_var1,pct_var2)
     
-    transformed_coords1 = format_coords(coord_header=order,\
-                                        coords=transformed_coords_m1,\
-                                        eigvals=eigvals,\
+    transformed_coords1 = format_coords(coord_header=order,
+                                        coords=transformed_coords_m1,
+                                        eigvals=eigvals,
                                         pct_var=pct_var)
-    transformed_coords2 = format_coords(coord_header=order,\
-                                        coords=transformed_coords_m2,\
-                                        eigvals=eigvals,\
+    transformed_coords2 = format_coords(coord_header=order,
+                                        coords=transformed_coords_m2,
+                                        eigvals=eigvals,
                                         pct_var=pct_var)
-    
-    # Return the results
-    return transformed_coords1, transformed_coords2, m_squared, randomized_coords2
 
-def procrustes_monte_carlo(coords_f1,\
-                           coords_f2,\
-                           trials=1000,\
-                           max_dimensions=None,\
-                           shuffle_f=shuffle_row_order,\
+    # Return the results
+    return (transformed_coords1, transformed_coords2, m_squared,
+            randomized_coords2)
+
+def procrustes_monte_carlo(coords_f1,
+                           coords_f2,
+                           trials=1000,
+                           max_dimensions=None,
+                           shuffle_f=shuffle_row_order,
                            sample_id_map=None,
-                           trial_output_dir=None): # rows are samples here
+                           trial_output_dir=None):
     """ Run procrustes analysis with random trials
     
         This analysis could be made more efficient, as the current version 
@@ -203,24 +200,24 @@ def procrustes_monte_carlo(coords_f1,\
     
     """
     # Get the M^2 for the actual data
-    actual_m_squared = get_procrustes_results(\
-     coords_f1,\
-     coords_f2,\
-     sample_id_map=sample_id_map,\
-     randomize=None,\
+    actual_m_squared = get_procrustes_results(
+     coords_f1,
+     coords_f2,
+     sample_id_map=sample_id_map,
+     randomize=None,
      max_dimensions=max_dimensions)[2]
-    
-    try:
-        max_dimensions_str = 'maxdim_%d' % max_dimensions 
-    except TypeError:
+
+    if max_dimensions is None:
         max_dimensions_str = 'alldim'
-    
+    else:
+        max_dimensions_str = 'maxdim_%d' % max_dimensions 
+
     # prep for storing trial details if a trial output dir 
     # was provided
     if trial_output_dir:
         create_dir(trial_output_dir)
-        trail_summary_fp = '%s/trial_summary_%s.txt' %\
-         (trial_output_dir,max_dimensions_str)
+        trail_summary_fp = '%s/trial_summary_%s.txt' % (trial_output_dir,
+                                                        max_dimensions_str)
         trial_summary_f = open(trail_summary_fp,'w')
         trial_summary_f.write('trial id\ttrial M^2\n')
         
@@ -270,18 +267,18 @@ def procrustes_monte_carlo(coords_f1,\
     return actual_m_squared, trial_m_squareds, count_better, count_better/trials
 
 def transform_coordinate_matrices(output_dir, input_fps, sid_map_fps=None,
-                                  num_dims=3, random_trials=None,
+                                  num_dims=None, random_trials=None,
                                   store_trial_details=False):
-    if num_dims < 0:
-        raise ValueError("Invalid number of dimensions %d. Must be greater "
-                         "than or equal to zero." % num_dims)
+    if num_dims is not None and num_dims < 1:
+        raise ValueError("Invalid number of dimensions: %d. Must be greater "
+                         "than zero." % num_dims)
 
     if random_trials is not None and random_trials < 10:
-        raise ValueError("Invalid number of trials %d. Must perform 10 or "
+        raise ValueError("Invalid number of trials: %d. Must perform 10 or "
                          "more trials for Monte Carlo analysis." %
                          random_trials)
 
-    if num_dims == 0:
+    if num_dims is None:
         max_dims_str = 'alldim'
     else:
         max_dims_str = str(num_dims)
@@ -297,8 +294,8 @@ def transform_coordinate_matrices(output_dir, input_fps, sid_map_fps=None,
     reference_input_fp = input_fps[0]
     reference_input_fp_dir, input_fn1 = split(reference_input_fp)
     reference_input_fp_basename, reference_input_fp_ext = splitext(input_fn1)
-    output_summary_fp = join(output_dir, 'procrustes_results.txt')
 
+    summary_lines = []
     for i, query_input_fp in enumerate(input_fps[1:]):
         query_input_fp_dir, query_input_fn = split(query_input_fp)
         query_input_fp_basename, query_input_fp_ext = splitext(query_input_fn)
@@ -330,24 +327,24 @@ def transform_coordinate_matrices(output_dir, input_fps, sid_map_fps=None,
 
             coords_f1 = list(open(reference_input_fp, 'U'))
             coords_f2 = list(open(query_input_fp, 'U'))
-            actual_m2, _, count_better, p_val = procrustes_monte_carlo(
-                    coords_f1, coords_f2, trials=random_trials,
-                    max_dimensions=num_dims, sample_id_map=sample_id_map,
+            _, _, count_better, p_val = procrustes_monte_carlo(coords_f1,
+                    coords_f2, trials=random_trials, max_dimensions=num_dims,
+                    sample_id_map=sample_id_map,
                     trial_output_dir=trial_output_dir)
 
             # truncate the p-value to the correct number of significant digits
             p_val_str = format_p_value_for_num_iters(p_val, random_trials)
-            summary_file_lines.append('%s\t%s\t%s\t%s\t%d\t%1.3f' %
-                    (reference_input_fp, query_input_fp, max_dims_str,
-                     p_val_str, count_better, actual_m2))
         else:
-            summary_file_lines.append('%s\t%s\t%s\tNA\tNA\t%1.3f' %
-                    (reference_input_fp, query_input_fp, max_dims_str, m2))
+            p_val_str = 'NA'
+            count_better = 'NA'
 
-    # Write output summary
-    with open(output_summary_fp, 'w') as f:
-        f.write('\n'.join(summary_file_lines))
-        f.write('\n')
+        summary_lines.append((reference_input_fp, query_input_fp,
+                              max_dims_str, p_val_str, count_better,
+                              '%1.3f' % m2))
+
+    # Write a TSV summary to disk.
+    output_summary_fp = join(output_dir, 'procrustes_results.txt')
+    _write_summary_lines(output_summary_fp, summary_lines)
 
 def _build_sample_id_map(sample_id_map_f):
     sample_id_map = {}
@@ -357,8 +354,13 @@ def _build_sample_id_map(sample_id_map_f):
 
     return sample_id_map
 
-def _format_summary_lines(rows, delimiter='\t'):
-    header = [('#FP1', 'FP2', 'Num included dimensions', 'Monte Carlo p-value',
-               'Count better','M^2'),
-              ('#Warning: p-values in this file are NOT currently adjusted '
-               'for multiple comparisons.')]
+def _write_summary_lines(output_fp, lines, delimiter='\t'):
+    header = [('# FP1', 'FP2', 'Num included dimensions',
+               'Monte Carlo p-value', 'Count better','M^2'),
+              ('# Warning: p-values in this file are NOT currently adjusted '
+               'for multiple comparisons.',)]
+
+    with open(output_fp, 'wb') as output_f:
+        summary_writer = csv.writer(output_f, delimiter=delimiter)
+        summary_writer.writerows(header)
+        summary_writer.writerows(lines)

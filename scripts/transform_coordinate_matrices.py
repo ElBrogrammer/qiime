@@ -37,9 +37,10 @@ script_info['optional_options']=[
  make_option('-r','--random_trials',type='int',
     help='Number of random permutations of matrix2 to perform. '+
     ' [default: (no Monte Carlo analysis performed)]',default=None),
- make_option('-d','--num_dimensions',type='int',default=3,
-    help='Number of dimensions to include in output matrices'+
-    ' [default: %default]'),
+ make_option('-d','--num_dimensions',default='3',
+    help='Number of dimensions to include in output matrices. Must be an '
+    'integer greater than zero or "all", in which case all dimensions will be '
+    'included [default: %default]'),
  make_option('-s','--sample_id_map_fps',
     type='existing_filepaths',
     help='If sample id maps are provided, there must be exactly one fewer files here than there are coordinate matrices (as each nth sample id map will provide the mapping from the first input coordinate matrix to the n+1th coordinate matrix) [default: %default]',
@@ -54,8 +55,18 @@ script_info['version'] = __version__
 def main():
     option_parser, opts, args = parse_command_line_parameters(**script_info)
 
+    num_dimensions = opts.num_dimensions
+    if num_dimensions == "all":
+        num_dimensions = None
+    else:
+        try:
+            num_dimensions = int(num_dimensions)
+        except ValueError:
+            option_parser.error("Error converting --num_dimensions to an "
+                                "integer.")
+
     transform_coordinate_matrices(opts.output_dir, opts.input_fps,
-                                  opts.sample_id_map_fps, opts.num_dimensions,
+                                  opts.sample_id_map_fps, num_dimensions,
                                   opts.random_trials, opts.store_trial_details)
 
 if __name__ == "__main__":
