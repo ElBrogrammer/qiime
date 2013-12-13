@@ -23,6 +23,13 @@ from qiime.util import create_dir
 from qiime.parse import fields_to_dict, parse_coords
 from qiime.format import format_coords, format_p_value_for_num_iters
 
+SUMMARY_HEADER = (
+        ('# FP1', 'FP2', 'Num included dimensions', 'Monte Carlo p-value',
+         'Count better', 'M^2'),
+        ('# Warning: p-values in this file are NOT currently adjusted for '
+         'multiple comparisons.',)
+)
+
 def shuffle_full_matrix(m):
     """  """
     shape = m.shape
@@ -355,12 +362,7 @@ def _build_sample_id_map(sample_id_map_f):
     return sample_id_map
 
 def _write_summary_lines(output_fp, lines, delimiter='\t'):
-    header = [('# FP1', 'FP2', 'Num included dimensions',
-               'Monte Carlo p-value', 'Count better','M^2'),
-              ('# Warning: p-values in this file are NOT currently adjusted '
-               'for multiple comparisons.',)]
-
     with open(output_fp, 'wb') as output_f:
         summary_writer = csv.writer(output_f, delimiter=delimiter)
-        summary_writer.writerows(header)
+        summary_writer.writerows(SUMMARY_HEADER)
         summary_writer.writerows(lines)
