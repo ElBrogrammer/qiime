@@ -47,9 +47,19 @@ class ProcrustesTests(TestCase):
         self.pcoa1_f = pcoa1_f.split('\n')
         self.sample_ids1, self.coords1, self.eigvals1, self.pct_var1 =\
           parse_coords(self.pcoa1_f)
+        self.pcoa1_fp = join(self.tmp_dir, 'pcoa1.txt')
+        with open(self.pcoa1_fp, 'w') as f:
+            f.write(pcoa1_f)
+        self.files_to_remove.append(self.pcoa1_fp)
+
         self.pcoa2_f = pcoa2_f.split('\n')
         self.sample_ids2, self.coords2, self.eigvals2, self.pct_var2 =\
           parse_coords(self.pcoa2_f)
+        self.pcoa2_fp = join(self.tmp_dir, 'pcoa2.txt')
+        with open(self.pcoa2_fp, 'w') as f:
+            f.write(pcoa2_f)
+        self.files_to_remove.append(self.pcoa2_fp)
+
         self.pcoa3_f = pcoa3_f.split('\n')
         self.sample_ids3, self.coords3, self.eigvals3, self.pct_var3 =\
           parse_coords(self.pcoa3_f)
@@ -234,6 +244,37 @@ class ProcrustesTests(TestCase):
         self.assertEqual(len(actual[1]),expected_len_trial_m2)
         self.assertEqual(actual[2], expected_count_better)
         self.assertEqual(actual[3], expected_p_value)
+
+    def test_transform_coordinate_matrices(self):
+        """Test high-level function works as expected with basic input."""
+        transform_coordinate_matrices(self.tmp_dir,
+                                      [self.pcoa1_fp, self.pcoa2_fp])
+
+        # Make sure we have a summary, a transformed reference, and a
+        # transformed query.
+        summary_fp = join(self.tmp_dir, 'procrustes_results.txt')
+        self.assertTrue(exists(summary_fp))
+        self.assertTrue(exists(join(self.tmp_dir,
+                                    'pcoa1_transformed_reference.txt')))
+        self.assertTrue(exists(join(self.tmp_dir, 'pcoa2_transformed_q1.txt')))
+
+        # Basic sanity checking of the summary.
+        with open(summary_fp, 'U') as f:
+            lines = f.read().split('\n')
+            self.assertEqual(len(lines), 4)
+            self.assertTrue(lines[0].startswith('#'))
+            self.assertTrue(lines[1].startswith('#'))
+            self.assertFalse(lines[2].startswith('#'))
+
+            fields = lines[2].split('\t')
+            self.assertEqual(fields[2], 'alldim')
+            self.assertEqual(fields[3], 'NA')
+            self.assertEqual(fields[4], 'NA')
+            self.assertEqual(fields[5], '0.021')
+
+    def test_transform_coordinate_matrices_multiple_queries(self):
+        """Test high-level function works as expected with multiple queries."""
+        pass
 
     def test_transform_coordinate_matrices_invalid_input(self):
         """Test that errors are raised appropriately upon invalid input."""
